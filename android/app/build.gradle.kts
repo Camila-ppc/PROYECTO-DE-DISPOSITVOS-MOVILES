@@ -47,3 +47,8 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // El modelo de texto latino se instala con la app y funciona sin conexión.
+    implementation("com.google.mlkit:text-recognition:16.0.1")
+}
