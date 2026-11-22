@@ -1,9 +1,11 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import '../models/item.dart';
 import '../widgets/foto.dart';
 import 'detalle_screen.dart';
 import 'publish_screen.dart';
 import 'puntos_screen.dart';
+import 'reconocer_texto_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -71,6 +73,15 @@ class _HomeScreenState extends State<HomeScreen> {
         appBar: AppBar(
           title: const Text('UCB Perdidos'),
           actions: [
+            if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android)
+              IconButton(
+                tooltip: 'Reconocer texto',
+                icon: const Icon(Icons.text_fields),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ReconocerTextoScreen()),
+                ),
+              ),
             IconButton(
               tooltip: 'Puntos de entrega (QR)',
               icon: const Icon(Icons.qr_code_2),
