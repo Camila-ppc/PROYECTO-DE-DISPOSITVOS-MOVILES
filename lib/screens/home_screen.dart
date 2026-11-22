@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/item.dart';
+import '../services/busqueda_service.dart';
 import '../widgets/foto.dart';
 import 'detalle_screen.dart';
 import 'publish_screen.dart';
@@ -14,6 +15,14 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final List<Item> _items = [];
+  final TextEditingController _busquedaController = TextEditingController();
+  String _consulta = '';
+
+  @override
+  void dispose() {
+    _busquedaController.dispose();
+    super.dispose();
+  }
 
   Future<void> _publicar() async {
     final nuevo = await Navigator.push<Item>(
@@ -32,7 +41,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _lista(bool encontrados) {
-    final data = _items.where((i) => i.encontrado == encontrados).toList();
+    final data = BusquedaService.buscar(
+      _items.where((i) => i.encontrado == encontrados).toList(),
+      _consulta,
+    );
     if (data.isEmpty) {
       return const Center(child: Text('Nada por aquí todavía 👀'));
     }
@@ -85,7 +97,35 @@ class _HomeScreenState extends State<HomeScreen> {
             Tab(text: 'Encontrados'),
           ]),
         ),
-        body: TabBarView(children: [_lista(false), _lista(true)]),
+        body: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+              child: TextField(
+                controller: _busquedaController,
+                onChanged: (texto) => setState(() => _consulta = texto),
+                decoration: InputDecoration(
+                  hintText: 'Buscar por objeto, descripción o lugar',
+                  prefixIcon: const Icon(Icons.search),
+                  border: const OutlineInputBorder(),
+                  suffixIcon: _consulta.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: 'Limpiar búsqueda',
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            _busquedaController.clear();
+                            setState(() => _consulta = '');
+                          },
+                        ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: TabBarView(children: [_lista(false), _lista(true)]),
+            ),
+          ],
+        ),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: _publicar,
           icon: const Icon(Icons.add),
