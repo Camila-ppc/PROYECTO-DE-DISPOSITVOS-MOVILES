@@ -12,8 +12,21 @@ class Foto extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Widget error(BuildContext c, Object e, StackTrace? s) => SizedBox(
+          width: width,
+          height: height,
+          child: const Center(child: Icon(Icons.image_not_supported_outlined)),
+        );
     return kIsWeb
-        ? Image.network(path, width: width, height: height, fit: BoxFit.cover)
-        : Image.file(File(path), width: width, height: height, fit: BoxFit.cover);
+        ? Image.network(path,
+            width: width,
+            height: height,
+            fit: BoxFit.cover,
+            errorBuilder: error)
+        : Image.file(File(path),
+            width: width,
+            height: height,
+            fit: BoxFit.cover,
+            errorBuilder: error);
   }
 }

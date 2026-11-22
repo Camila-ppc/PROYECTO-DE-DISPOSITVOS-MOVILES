@@ -1,9 +1,11 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import '../models/categorias.dart';
 import '../models/item.dart';
 import '../models/puntos.dart';
 import '../services/ia_service.dart';
+import '../services/ocr_service.dart';
+import '../services/storage_service.dart';
 import '../widgets/foto.dart';
 import 'scan_screen.dart';
 
@@ -23,21 +25,61 @@ class _PublishScreenState extends State<PublishScreen> {
   bool _encontrado = false;
   XFile? _foto;
   bool _cargandoIa = false;
+  bool _leyendoTexto = false;
+  bool _guardando = false;
+  String _categoria = 'Otros';
+  String _textoOcr = '';
 
   Future<void> _tomarFoto(ImageSource fuente) async {
-    final f = await ImagePicker().pickImage(source: fuente, imageQuality: 70);
-    if (f != null) setState(() => _foto = f);
+    final f = await ImagePicker().pickImage(
+      source: fuente,
+      imageQuality: 70,
+      maxWidth: 1280, // más liviana: sube rápido y cuesta menos en la IA
+      maxHeight: 1280,
+    );
+    if (f == null || !mounted) return;
+    setState(() {
+      _foto = f;
+      _textoOcr = '';
+    });
+    _leerTexto(f);
+  }
+
+  /// OCR local (ML Kit): corre solo al elegir la foto, sin internet.
+  Future<void> _leerTexto(XFile foto) async {
+    if (!OcrService.disponible) return;
+    setState(() => _leyendoTexto = true);
+    final texto = await OcrService.leer(foto.path);
+    if (!mounted || _foto?.path != foto.path) return; // cambió la foto
+    setState(() {
+      _textoOcr = texto;
+      _leyendoTexto = false;
+    });
+  }
+
+  void _aviso(String mensaje) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(mensaje)));
   }
 
   Future<void> _autocompletar() async {
-    if (_foto == null) return;
+    final foto = _foto;
+    if (foto == null) return;
     setState(() => _cargandoIa = true);
-    final r = await IaService.describirFoto(File(_foto!.path));
-    setState(() {
-      _titulo.text = r['titulo'] ?? '';
-      _desc.text = r['descripcion'] ?? '';
-      _cargandoIa = false;
-    });
+    try {
+      final r = await IaService.describirFoto(foto, textoOcr: _textoOcr);
+      if (!mounted) return;
+      setState(() {
+        _titulo.text = r['titulo'] ?? '';
+        _desc.text = r['descripcion'] ?? '';
+        _categoria = categoriaValida(r['categoria']);
+      });
+    } on IaException catch (e) {
+      _aviso(e.mensaje);
+    } finally {
+      if (mounted) setState(() => _cargandoIa = false);
+    }
   }
 
   Future<void> _escanearPunto() async {
@@ -54,8 +96,15 @@ class _PublishScreenState extends State<PublishScreen> {
     }
   }
 
-  void _guardar() {
-    if (_titulo.text.trim().isEmpty) return;
+  Future<void> _guardar() async {
+    if (_guardando) return;
+    if (_titulo.text.trim().isEmpty) {
+      _aviso('Escribe qué es el objeto (o usa el botón IA).');
+      return;
+    }
+    setState(() => _guardando = true);
+    final ruta = await StorageService.guardarFoto(_foto);
+    if (!mounted) return;
     Navigator.pop(
       context,
       Item(
@@ -64,7 +113,9 @@ class _PublishScreenState extends State<PublishScreen> {
         descripcion: _desc.text.trim(),
         lugar: _lugar.text.trim(),
         encontrado: _encontrado,
-        fotoPath: _foto?.path,
+        fotoPath: ruta,
+        textoOcr: _textoOcr,
+        categoria: _categoria,
         pregunta: _encontrado ? _pregunta.text.trim() : null,
         respuesta: _encontrado ? _respuesta.text.trim() : null,
       ),
@@ -106,7 +157,9 @@ class _PublishScreenState extends State<PublishScreen> {
               ),
               const Spacer(),
               FilledButton.tonalIcon(
-                onPressed: (_foto == null || _cargandoIa) ? null : _autocompletar,
+                onPressed: (_foto == null || _cargandoIa || _leyendoTexto)
+                    ? null
+                    : _autocompletar,
                 icon: _cargandoIa
                     ? const SizedBox(
                         width: 16,
@@ -117,6 +170,19 @@ class _PublishScreenState extends State<PublishScreen> {
               ),
             ],
           ),
+          if (_leyendoTexto)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: LinearProgressIndicator(semanticsLabel: 'Leyendo texto'),
+            ),
+          if (_textoOcr.isNotEmpty)
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.text_fields),
+                title: const Text('Texto detectado en la foto'),
+                subtitle: Text(_textoOcr, maxLines: 4, overflow: TextOverflow.ellipsis),
+              ),
+            ),
           const SizedBox(height: 8),
           TextField(
             controller: _titulo,
@@ -129,6 +195,21 @@ class _PublishScreenState extends State<PublishScreen> {
             maxLines: 3,
             decoration: const InputDecoration(
                 labelText: 'Descripción', border: OutlineInputBorder()),
+          ),
+          const SizedBox(height: 12),
+          Text('Categoría', style: Theme.of(context).textTheme.labelLarge),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final c in categorias)
+                ChoiceChip(
+                  avatar: Icon(iconoCategoria(c), size: 16),
+                  label: Text(c),
+                  selected: _categoria == c,
+                  onSelected: (_) => setState(() => _categoria = c),
+                ),
+            ],
           ),
           const SizedBox(height: 12),
           TextField(
@@ -163,7 +244,10 @@ class _PublishScreenState extends State<PublishScreen> {
             ),
           ],
           const SizedBox(height: 20),
-          FilledButton(onPressed: _guardar, child: const Text('Publicar')),
+          FilledButton(
+            onPressed: _guardando ? null : _guardar,
+            child: Text(_guardando ? 'Publicando…' : 'Publicar'),
+          ),
         ],
       ),
     );

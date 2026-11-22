@@ -1,15 +1,18 @@
 import '../models/item.dart';
+import 'texto_util.dart';
 
 class BusquedaService {
-  static List<Item> buscar(List<Item> items, String texto) {
-    final consulta = texto.trim().toLowerCase();
-
-    if (consulta.isEmpty) return List<Item>.of(items);
+  static List<Item> buscar(List<Item> items, String texto, {String? categoria}) {
+    final consulta = normalizar(texto);
 
     return items.where((item) {
-      return item.titulo.toLowerCase().contains(consulta) ||
-          item.descripcion.toLowerCase().contains(consulta) ||
-          item.lugar.toLowerCase().contains(consulta);
+      if (categoria != null && item.categoria != categoria) return false;
+      if (consulta.isEmpty) return true;
+      final contenido = normalizar(
+        '${item.titulo} ${item.descripcion} ${item.lugar} '
+        '${item.textoOcr} ${item.categoria}',
+      );
+      return contenido.contains(consulta);
     }).toList();
   }
 }
